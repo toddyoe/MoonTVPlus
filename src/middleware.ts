@@ -39,7 +39,7 @@ export async function middleware(request: NextRequest) {
 
   // 其他模式：验证签名和时间戳，支持自动续期
   // 检查是否有用户名（非localStorage模式下密码不存储在cookie中）
-  if (!authInfo.username || !authInfo.signature || !authInfo.timestamp) {
+  if (!authInfo.username || !authInfo.role || !authInfo.signature || !authInfo.timestamp) {
     return handleAuthFailure(request, pathname);
   }
 

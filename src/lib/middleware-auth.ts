@@ -43,14 +43,6 @@ export async function refreshAccessToken(
   }
 
   const now = Date.now();
-  const authData = {
-    username,
-    role,
-    timestamp: now, // 新的 Access Token 时间戳
-    tokenId,
-    refreshToken,
-    refreshExpires
-  };
 
   // 生成新的签名
   const dataToSign = JSON.stringify({
@@ -64,7 +56,15 @@ export async function refreshAccessToken(
     process.env.PASSWORD || ''
   );
 
-  authData.signature = signature;
+  const authData = {
+    username,
+    role,
+    timestamp: now, // 新的 Access Token 时间戳
+    tokenId,
+    refreshToken,
+    refreshExpires,
+    signature
+  };
 
   console.log(`Refreshed access token for ${username}`);
 
