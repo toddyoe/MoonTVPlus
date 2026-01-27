@@ -1,0 +1,94 @@
+name: Fork Sync
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # 每天午夜执行
+  workflow_dispatch:
+
+concurrency:
+  group: fork-sync-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  sync_with_upstream:
+    name: Sync with upstream
+    runs-on: ubuntu-latest
+    if: ${{ github.event.repository.fork }}
+
+    steps:
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Add upstream remote & fetch
+        run: |
+          set -euo pipefail
+          git remote -v
+
+          # 上游仓库
+          if git remote get-url upstream >/dev/null 2>&1; then
+            git remote set-url upstream https://github.com/mtvpls/MoonTVPlus.git
+          else
+            git remote add upstream https://github.com/mtvpls/MoonTVPlus.git
+          fi
+
+          git fetch --prune upstream
+          git fetch --prune origin
+
+      - name: Rebase main onto upstream/main
+        run: |
+          set -euo pipefail
+
+          TARGET_BRANCH="main"
+          UPSTREAM_BRANCH="main"
+
+          # 确保在目标分支
+          git checkout "$TARGET_BRANCH"
+
+          BEFORE="$(git rev-parse HEAD)"
+          echo "Before: $BEFORE"
+
+          # 先确保本地跟 origin 一致，避免把 origin 上的更新漏掉
+          # 这里用 rebase 拉取，避免产生 merge commit
+          git pull --rebase origin "$TARGET_BRANCH"
+
+          # 核心：把你的分支 rebase 到 upstream 分支之上
+          git rebase "upstream/$UPSTREAM_BRANCH"
+
+          AFTER="$(git rev-parse HEAD)"
+          echo "After:  $AFTER"
+
+          if [ "$BEFORE" = "$AFTER" ]; then
+            echo "No changes after rebase. Nothing to push."
+            exit 0
+          fi
+
+          echo "Rebase produced updates, pushing..."
+
+          # rebase 可能改写历史，需要强推，用 --force-with-lease 更安全
+          git push -f origin "$TARGET_BRANCH"
+
+      - name: Check for new commits
+        if: success()
+        run: echo "Sync completed successfully"
+
+      - name: Check for Failure
+        if: failure()
+        run: |
+          echo "[Error] Sync failed. This might be due to:"
+          echo "1. Rebase conflicts (needs manual resolution)"
+          echo "2. Branch protection blocks force push"
+          echo "3. Network / permission issues"
+          echo "Please check the logs and consider manual sync if needed."
+          exit 1
